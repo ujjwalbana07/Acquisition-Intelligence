@@ -62,17 +62,20 @@ LTV: ${(otherContext.metrics.ltv * 100).toFixed(1)}%
 --- PRIMARY DEAL CONTEXT ---
 Property: ${context.inputs.propertyName} (${context.inputs.location})
 Asset Class: ${context.inputs.propertyType}
-Acquisition Price: $${context.inputs.askingPrice?.toLocaleString()}
+Acquisition Price: $${context.inputs.askingPrice?.toLocaleString() || '---'}
 Score: ${context.result.score}/100 | Verdict: ${context.result.recommendation}
 
-[METRICS]
-DSCR: ${context.metrics.dscr?.toFixed(2)}x
+[CORE METRICS]
+NOI: $${context.metrics.noi?.toLocaleString() || '---'}
 Cap Rate: ${(context.metrics.capRate * 100).toFixed(2)}%
+DSCR: ${context.metrics.dscr?.toFixed(2) || '---'}x
 Cash-on-Cash: ${(context.metrics.cashOnCashReturn * 100).toFixed(2)}%
 LTV: ${(context.metrics.ltv * 100).toFixed(1)}%
+Free Cash Flow (Annual): $${context.metrics.annualCashFlow?.toLocaleString() || '---'}
+Break-Even Occupancy: ${(context.metrics.breakEvenOccupancy * 100).toFixed(1)}%
 
 [RISKS]
-${context.risks?.map(r => `- ${r.severity}: ${r.title}`).join('\n')}
+${context.risks?.map(r => `- ${r.severity}: ${r.title}`).join('\n') || 'No major risks identified.'}
 
 ${comparisonSection}
 

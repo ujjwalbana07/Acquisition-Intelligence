@@ -80,3 +80,43 @@ export function getSeverityStyle(severity) {
   };
   return styles[severity] || styles.medium;
 }
+
+/**
+ * Institutional Metric Resolver
+ * Ensures all metrics are safely stringified with units OR nullified if invalid.
+ */
+export function resolveMetric(value, type = 'number', decimals = 2) {
+  if (value === null || value === undefined || isNaN(value)) return null;
+  
+  switch (type) {
+    case 'currency':
+      return formatCurrency(value, false);
+    case 'compactCurrency':
+      return formatCurrency(value, true);
+    case 'percent':
+      return (value * 100).toFixed(decimals) + '%';
+    case 'multiple':
+      return value.toFixed(decimals) + 'x';
+    default:
+      return value.toFixed(decimals);
+  }
+}
+
+/**
+ * Creates a fully resolved, safe string manifest of all core metrics
+ * for use in LLM payloads and fallback narratives.
+ */
+export function getResolvedMetrics(metrics, inputs) {
+  return {
+    noi: resolveMetric(metrics.noi, 'currency'),
+    capRate: resolveMetric(metrics.capRate, 'percent'),
+    dscr: resolveMetric(metrics.dscr, 'multiple'),
+    cashOnCash: resolveMetric(metrics.cashOnCashReturn || metrics.cashOnCash, 'percent'),
+    ltv: resolveMetric(metrics.ltv, 'percent'),
+    breakEven: resolveMetric(metrics.breakEvenOccupancy, 'percent'),
+    freeCashFlow: resolveMetric(metrics.annualCashFlow, 'currency'),
+    noiFormatted: resolveMetric(metrics.noi, 'compactCurrency'),
+    score: resolveMetric(metrics.score || 0, 'number', 0),
+    price: resolveMetric(inputs?.askingPrice, 'currency'),
+  };
+}

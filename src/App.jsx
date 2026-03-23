@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { runAllCalculations } from './utils/calculations';
 import { analyzeRisks } from './utils/riskEngine';
 import { generateRecommendation, generateNextSteps } from './utils/recommendation';
@@ -16,8 +16,12 @@ import NextSteps from './components/NextSteps';
 import ChartPanel from './components/ChartPanel';
 import AIAgentCopilot from './components/AIAgentCopilot';
 
-import { Activity, RefreshCcw, Moon, Sun } from 'lucide-react';
+import { Activity, RefreshCcw, Moon, Sun, Download } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+import BriefReport from './components/BriefReport';
 
 function App() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS || {});
@@ -31,9 +35,13 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  // New state for PDF export
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef(null);
+
   const handleRunAnalysis = () => {
     setIsAnalyzing(true);
-    
+
     setTimeout(() => {
       const calculatedMetrics = runAllCalculations(inputs);
       const identifiedRisks = analyzeRisks(calculatedMetrics, inputs);
@@ -76,8 +84,46 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  const handleExportPDF = async () => {
+    if (!reportRef.current || !metrics) return;
+    setIsExporting(true);
+    
+    try {
+      // Small delay to ensure render
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const scenarioName = inputs.propertyName || 'Investment';
+      const filename = `${scenarioName.replace(/\s+/g, '-')}-Brief-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(filename);
+    } catch (error) {
+      console.error('PDF Export Failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className={`min-h-screen flex flex-col relative text-slate-200 decoration-slate-400 ${theme === 'light' ? 'theme-light' : ''}`}>
+      
+      {/* Hidden PDF Template */}
+      <BriefReport 
+        context={{ inputs, metrics, risks, result, nextSteps }} 
+        reportRef={reportRef} 
+      />
       
       {/* Background */}
       <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
@@ -105,6 +151,19 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
+              <button 
+                onClick={handleExportPDF}
+                disabled={!metrics || isExporting}
+                className="mr-4 px-4 py-2 text-[11px] font-black uppercase tracking-widest bg-sky-500 hover:bg-sky-400 text-white rounded-lg transition-all shadow-lg shadow-sky-500/20 flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isExporting ? (
+                  <RefreshCcw size={14} className="animate-spin" />
+                ) : (
+                  <Download size={14} />
+                )}
+                {isExporting ? "Generating..." : "Download PDF Brief"}
+              </button>
+
               <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500 mr-2 hidden lg:block">
                 Investment Cases:
               </span>

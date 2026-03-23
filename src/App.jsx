@@ -14,6 +14,7 @@ import ThresholdComparison from './components/ThresholdComparison';
 import SensitivityAnalysis from './components/SensitivityAnalysis';
 import NextSteps from './components/NextSteps';
 import ChartPanel from './components/ChartPanel';
+import AIAgentCopilot from './components/AIAgentCopilot';
 
 import { Activity, RefreshCcw, Moon, Sun } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
@@ -209,6 +210,7 @@ function App() {
               </div>
 
               <TabsContent value="dashboard" className="space-y-6 outline-none animate-fade-in-up">
+                <AIAgentCopilot context={{ inputs, metrics, risks, result, nextSteps }} />
                 <DashboardExecutiveSummary result={result} />
                 <RecommendationPanel result={result} />
                 

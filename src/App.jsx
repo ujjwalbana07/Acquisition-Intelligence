@@ -18,10 +18,8 @@ import AIAgentCopilot from './components/AIAgentCopilot';
 
 import { Activity, RefreshCcw, Moon, Sun, Download } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
-import BriefReport from './components/BriefReport';
+import { generatePDF } from './utils/pdfGenerator';
 
 function App() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS || {});
@@ -37,7 +35,6 @@ function App() {
 
   // New state for PDF export
   const [isExporting, setIsExporting] = useState(false);
-  const reportRef = useRef(null);
 
   const handleRunAnalysis = () => {
     setIsAnalyzing(true);
@@ -85,32 +82,15 @@ function App() {
   };
 
   const handleExportPDF = async () => {
-    if (!reportRef.current || !metrics) return;
+    if (!metrics) return;
     setIsExporting(true);
     
     try {
-      // Small delay to ensure render
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      const scenarioName = inputs.propertyName || 'Investment';
-      const filename = `${scenarioName.replace(/\s+/g, '-')}-Brief-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(filename);
+      // Direct drawing avoids html2canvas/CSS issues
+      generatePDF({ inputs, metrics, risks, result, nextSteps });
     } catch (error) {
       console.error('PDF Export Failed:', error);
+      alert('Unable to generate PDF. Please try again.');
     } finally {
       setIsExporting(false);
     }
@@ -118,12 +98,6 @@ function App() {
 
   return (
     <div className={`min-h-screen flex flex-col relative text-slate-200 decoration-slate-400 ${theme === 'light' ? 'theme-light' : ''}`}>
-      
-      {/* Hidden PDF Template */}
-      <BriefReport 
-        context={{ inputs, metrics, risks, result, nextSteps }} 
-        reportRef={reportRef} 
-      />
       
       {/* Background */}
       <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">

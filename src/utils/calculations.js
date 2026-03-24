@@ -167,3 +167,54 @@ export function runAllCalculations(inputs) {
     annualCashFlow,
   };
 }
+
+/**
+ * Predicts the maximum purchase price to satisfy standard institutional DSCR and Cash-on-Cash targets.
+ * Decrements asking price while holding LTV constant to find a mathematical floor.
+ */
+export function calcTargetEntryBasis(inputs, currentMetrics, targetDSCR = 1.25, targetCoC = 0.08) {
+  const { noi } = currentMetrics;
+  let testPrice = inputs.askingPrice;
+  const originalLTV = inputs.askingPrice > 0 ? inputs.loanAmount / inputs.askingPrice : 0;
+  const step = 5000;
+  
+  let currentDSCR = currentMetrics.dscr || 0;
+  let currentCoC = currentMetrics.cashOnCash || 0;
+  let iterations = 0;
+  
+  // Guard for structurally unviable deals (e.g. negative NOI where price reduction doesn't help)
+  if (noi <= 0) return { viable: false, targetPrice: null };
+
+  while ((currentDSCR < targetDSCR || currentCoC < targetCoC) && testPrice > 0 && iterations < 5000) {
+    testPrice -= step;
+    
+    const newLoanAmount = testPrice * originalLTV;
+    const newDownPayment = testPrice - newLoanAmount;
+    
+    const newADS = calcAnnualDebtService(newLoanAmount, inputs.interestRate, inputs.loanTerm);
+    currentDSCR = calcDSCR(noi, newADS);
+    
+    const newTotalCash = calcTotalCashInvested(newDownPayment, inputs.renovationCost);
+    currentCoC = calcCashOnCash(noi, newADS, newTotalCash);
+    
+    iterations++;
+  }
+  
+  if (testPrice <= 0) return { viable: false, targetPrice: null };
+  
+  // Determine dominant blocking constraint heuristically
+  const dscrIsTight = currentDSCR - targetDSCR < 0.05;
+  const cocIsTight = currentCoC - targetCoC < 0.005;
+  let blocker = 'Leverage/Returns';
+  if (dscrIsTight && !cocIsTight) blocker = 'DSCR (Debt Service)';
+  if (cocIsTight && !dscrIsTight) blocker = 'Cash-on-Cash Return';
+  
+  return {
+    viable: true,
+    targetPrice: testPrice,
+    gapPercent: ((inputs.askingPrice - testPrice) / inputs.askingPrice) * 100,
+    solvedDSCR: currentDSCR,
+    solvedCoC: currentCoC,
+    bindingConstraint: blocker
+  };
+}

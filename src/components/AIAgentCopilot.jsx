@@ -11,14 +11,15 @@ import {
   fetchDiligenceQA,
   fetchConditions,
   fetchComparison,
-  fetchCustomPrompt
+  fetchCustomPrompt,
+  fetchTargetEntryBasis
 } from '../utils/aiService';
 import { SCENARIOS } from '../data/scenarios';
 import { runAllCalculations } from '../utils/calculations';
 import { generateRecommendation } from '../utils/recommendation';
 import { analyzeRisks } from '../utils/riskEngine';
 
-export default function AIAgentCopilot({ context }) {
+export default function AIAgentCopilot({ context, onMemoGenerated }) {
   const [loading, setLoading] = useState(true);
   const [activeAction, setActiveAction] = useState('insights');
   const [narrative, setNarrative] = useState('');
@@ -71,9 +72,15 @@ export default function AIAgentCopilot({ context }) {
     }
       
     if (data && context.id === currentContextId) {
-      setNarrative(data.narrative);
-      setPrompts(data.smartPrompts);
-      setConfidence(data.confidence || 'Deterministic Alignment');
+      // Render payload
+      setNarrative(data.narrative || "No insight available.");
+      setPrompts(data.smartPrompts || []);
+      setConfidence(data.confidence || "Deterministic Alignment");
+
+      // Sync memo globally if this is the memo generation action
+      if (actionId === 'memo' && onMemoGenerated && data.narrative) {
+        onMemoGenerated(data.narrative);
+      }
       setLoading(false);
     }
   };
@@ -201,6 +208,21 @@ export default function AIAgentCopilot({ context }) {
               </div>
             ) : (
               <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-500">
+                {activeAction === 'compare' && compareId && (
+                  <div className="mb-5 bg-slate-900/60 border border-slate-700/50 rounded-lg p-3.5 flex items-center justify-between text-xs shadow-inner">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-500">Primary Case</span>
+                      <strong className="text-sky-400 font-bold">{context.inputs.propertyName}</strong>
+                    </div>
+                    <div className="flex items-center justify-center bg-slate-800 rounded-full w-8 h-8 mx-2 shrink-0 border border-slate-700">
+                      <Scale size={14} className="text-slate-400" />
+                    </div>
+                    <div className="flex flex-col gap-1 text-right">
+                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-500">Comparison Case</span>
+                      <strong className="text-slate-200 font-bold">{SCENARIOS.find(s => s.id === compareId)?.inputs?.propertyName}</strong>
+                    </div>
+                  </div>
+                )}
                 <div className="flex-1 text-slate-300">
                   {formatNarrative(narrative)}
                 </div>
@@ -262,6 +284,16 @@ export default function AIAgentCopilot({ context }) {
                 title="What Changes Verdict?" 
                 desc="Bridges between grade levels."
                 onClick={() => handleAction('shifting', fetchVerdictShifting)}
+                disabled={loading}
+              />
+
+              <ActionBtn 
+                active={activeAction === 'target'} 
+                icon={<TrendingDown size={14} />} 
+                color="emerald"
+                title="Target Entry Basis" 
+                desc="Negotiation Price Calculator."
+                onClick={() => handleAction('target', fetchTargetEntryBasis)}
                 disabled={loading}
               />
 

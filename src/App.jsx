@@ -16,10 +16,8 @@ import NextSteps from './components/NextSteps';
 import ChartPanel from './components/ChartPanel';
 import AIAgentCopilot from './components/AIAgentCopilot';
 
-import { Activity, RefreshCcw, Moon, Sun, Download } from 'lucide-react';
+import { Activity, RefreshCcw, Moon, Sun } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
-
-import { generatePDF } from './utils/pdfGenerator';
 
 function App() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS || {});
@@ -32,9 +30,7 @@ function App() {
   const [nextSteps, setNextSteps] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-
-  // New state for PDF export
-  const [isExporting, setIsExporting] = useState(false);
+  const [llmMemo, setLlmMemo] = useState(null);
 
   const handleRunAnalysis = () => {
     setIsAnalyzing(true);
@@ -58,13 +54,28 @@ function App() {
   const loadScenario = (scenarioId) => {
     const scenario = SCENARIOS.find(s => s.id === scenarioId);
     if (scenario) {
-      setInputs(scenario.inputs);
-      setLoadedScenarioName(scenario.inputs.propertyName);
+      // Create a fresh clone to prevent reference leakage
+      const newInputs = { ...scenario.inputs };
+      setInputs(newInputs);
+      setLoadedScenarioName(newInputs.propertyName);
+      setLlmMemo(null); // Instantly wipe stale memos
       
-      setMetrics(null);
-      setRisks(null);
-      setResult(null);
-      setNextSteps(null);
+      // Auto-run analysis to keep dashboard and copilot fully synchronized
+      setIsAnalyzing(true);
+      setTimeout(() => {
+        const calculatedMetrics = runAllCalculations(newInputs);
+        const identifiedRisks = analyzeRisks(calculatedMetrics, newInputs);
+        const recommendationResult = generateRecommendation(calculatedMetrics, newInputs, identifiedRisks);
+        const generatedSteps = generateNextSteps(recommendationResult.recommendation, identifiedRisks, calculatedMetrics, newInputs);
+
+        setMetrics(calculatedMetrics);
+        setRisks(identifiedRisks);
+        setResult(recommendationResult);
+        setNextSteps(generatedSteps);
+        
+        setIsAnalyzing(false);
+        setActiveTab('dashboard');
+      }, 500);
     }
   };
 
@@ -75,25 +86,11 @@ function App() {
     setRisks(null);
     setResult(null);
     setNextSteps(null);
+    setLlmMemo(null);
   };
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  };
-
-  const handleExportPDF = async () => {
-    if (!metrics) return;
-    setIsExporting(true);
-    
-    try {
-      // Direct drawing avoids html2canvas/CSS issues
-      generatePDF({ inputs, metrics, risks, result, nextSteps });
-    } catch (error) {
-      console.error('PDF Export Failed:', error);
-      alert('Unable to generate PDF. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   return (
@@ -125,19 +122,6 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-              <button 
-                onClick={handleExportPDF}
-                disabled={!metrics || isExporting}
-                className="mr-4 px-4 py-2 text-[11px] font-black uppercase tracking-widest bg-sky-500 hover:bg-sky-400 text-white rounded-lg transition-all shadow-lg shadow-sky-500/20 flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isExporting ? (
-                  <RefreshCcw size={14} className="animate-spin" />
-                ) : (
-                  <Download size={14} />
-                )}
-                {isExporting ? "Generating..." : "Download PDF Brief"}
-              </button>
-
               <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500 mr-2 hidden lg:block">
                 Investment Cases:
               </span>
@@ -243,7 +227,10 @@ function App() {
               </div>
 
               <TabsContent value="dashboard" className="space-y-6 outline-none animate-fade-in-up">
-                <AIAgentCopilot context={{ inputs, metrics, risks, result, nextSteps }} />
+                <AIAgentCopilot context={{ id: loadedScenarioName || 'custom', inputs, metrics, risks, result, nextSteps }} onMemoGenerated={(text) => {
+                  setLlmMemo(text);
+                  setActiveTab('memo');
+                }} />
                 <DashboardExecutiveSummary result={result} />
                 <RecommendationPanel result={result} />
                 
@@ -267,7 +254,14 @@ function App() {
               </TabsContent>
 
               <TabsContent value="memo" className="outline-none animate-fade-in-up">
-                <ExecutiveSummary inputs={inputs} metrics={metrics} result={result} />
+                <ExecutiveSummary 
+                  inputs={inputs} 
+                  metrics={metrics} 
+                  result={result} 
+                  risks={risks} 
+                  nextSteps={nextSteps}
+                  llmMemo={llmMemo} 
+                />
               </TabsContent>
 
             </Tabs>

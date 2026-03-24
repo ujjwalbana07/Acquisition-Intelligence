@@ -1,6 +1,7 @@
 import { getResolvedMetrics } from './formatters';
+import { calcTargetEntryBasis } from './calculations';
 
-export function getFallbackNarrative(context, action) {
+export function getFallbackNarrative(context, action, payloadStr) {
   const { inputs, metrics, result, risks } = context;
   const m = getResolvedMetrics(metrics, inputs);
   
@@ -30,16 +31,49 @@ ${sentence('- **Basis Correction**: ', m.price, `A reduction in the **{val}** as
 ${sentence('- **Capital Stack**: ', m.dscr, `Optimizing leverage would restore **{val}** coverage to safer institutional bands.`)}
 - **Operating Efficiencies**: Targeting better expense management would improve net yields and overall deal score.`,
 
-    shifting: `To achieve a verdict upgrade from **${verdict}**:
-- Move **Cap Rate** toward market-leading averages through aggressive basis negotiation.
-- Secure financing with better terms to resolve yield constraints.
-${sentence('- **Stabilized Occupancy**: ', m.breakEven, `Validation of occupancy above the **{val}** break-even threshold is critical.`)}`,
+    shifting: (() => {
+      const v = verdict.toLowerCase();
+      if (v === 'reject') return `To achieve a verdict upgrade from **${verdict}** to Renegotiate:
+- Materially reduce the **Purchase Price** to expand entry yield.
+- Secure financing with materially lower leverage to resolve debt constraints.
+${sentence('- **Operating Income**: ', m.price, `Increase underwritten revenue to support a higher valuation.`)}`;
+      if (v === 'renegotiate') return `To achieve a verdict upgrade from **${verdict}** to Proceed with Caution:
+- Negotiate a modest **Cap Rate** expansion through basis reduction.
+- Optimize the capital stack to improve cash-on-cash returns.
+${sentence('- **Break-Even**: ', m.breakEven, `Ensure the **{val}** break-even threshold is safely below market vacancy averages.`)}`;
+      if (v === 'proceed with caution') return `To achieve a full upgrade from **${verdict}** to Proceed:
+- Resolve any flagged structural or macro risks completely.
+- Push DSCR metrics higher through slightly lower leverage or better rate locks.
+- Secure ironclad tenant estoppels to guarantee yield stability.`;
+      
+      return `The asset already clears institutional thresholds. No verdict upgrade is required. Current approval quality depends on:
+- Maintaining DSCR cushion and protecting entry basis discipline.
+- Confirming lease and market assumptions during diligence.
+- Validating downside vacancy resilience before closing.`;
+    })(),
 
-    memo: `**INVESTMENT THESIS**: Acquisition of ${propertyName} presents a ${verdict} opportunity ${m.price ? `at a ${m.price} basis` : ''}. The deal is motivated by ${parseInt(score) > 80 ? 'strong fundamental yield' : 'stabilization potential'} in the local corridor.
+    memo: `1. DECISION SUMMARY
+Acquisition of ${propertyName} presents a ${verdict.toUpperCase()} opportunity at a ${m.price ? m.price : 'market'} basis. The deal is motivated by its modeled return profile against the current capital stack.
 
-**RISK SUMMARY**: Material concentration revolves around ${topRisks[0] || 'market timing'} and ${topRisks[1] || 'operational execution'}. ${sentence('Current DSCR of ', m.dscr, `Current DSCR of **{val}** provides calculated margin.`)}
+2. RECOMMENDATION
+${verdict.toUpperCase()} - A **${verdict.toUpperCase()}** position is mathematically optimal to protect downside while preserving basis integrity.
 
-**EXECUTION**: Immediate priorities include cap-ex verification and lease-audit validation to protect the yield profile.`,
+3. KEY METRICS
+- Asset Yield (Cap Rate):     ${m.capRate}
+- Debt Service Coverage:      ${m.dscr}x
+- Levered Cash Return:        ${m.cashOnCash || 'N/A'}
+- Leverage (LTV):             ${m.ltv || 'N/A'}
+- Break-Even Occupancy:       N/A
+- Free Cash Flow:             N/A
+
+4. MAJOR RISK FACTORS
+${risks?.length ? risks.map(r => `- [${r.severity.toUpperCase()}] ${r.title}: ${r.message || r.explanation}`).join('\\n') : 'No material risks flagged.'}
+
+5. DILIGENCE / APPROVAL CONDITIONS
+${verdict.includes('Proceed') ? '1. Final verification of rent roll accuracy and tenant estoppel certificates.\\n2. Locked financing at an interest rate not exceeding institutional benchmarks.' : '1. Renegotiate pricing or capital stack to achieve institutional yield thresholds.\\n2. Resolve primary risk concentration prior to any capital commitment.'}
+
+6. CONCLUSION
+Final execution depends on resolving identified risks and locking institutional financing within underwritten parameters. Immediate proceeding is advised only upon satisfactory technical diligence.`,
 
     qa: `1. **Lease Audit**: Verify all rental escalations and turnover assumptions against T-12 actuals.
 2. **CapEx Scope**: Confirm if the renovation budget is sufficient for market rent premiums.
@@ -54,7 +88,33 @@ ${sentence('2. ', m.freeCashFlow, `Verification of **{val}** annual free cash fl
       `**REJECTION RATIONALE**:
 ${sentence('1. ', m.dscr, `Insufficient DSCR cushion (**{val}**) relative to the cost of capital.`)}
 2. Elevated risk concentration in **${topRisks.join(', ')}**.
-${sentence('3. ', m.cashOnCash, `Yield profile of **{val}** does not meet the risk-adjusted target return.`)}`
+${sentence('3. ', m.cashOnCash, `Yield profile of **{val}** does not meet the risk-adjusted target return.`)}`,
+
+    target: (() => {
+      const target = calcTargetEntryBasis(inputs, metrics);
+      if (!target.viable) {
+        return `The deterministic model indicates this deal is structurally unviable, yielding negative or fundamentally broken NOI at its core. Price reduction alone cannot solve the intrinsic revenue deficit.`;
+      }
+      return `To hit institutional minimums (1.25 DSCR and 8.0% Cash-on-Cash), the deterministic engine calculates a target entry price of **$${target.targetPrice.toLocaleString()}**, which is **${target.gapPercent.toFixed(1)}% below** the current asking price. The binding mathematical constraint is **${target.bindingConstraint}**. Focus negotiations entirely on this basis, and evaluate if substantial debt restructuring is also required.`;
+    })(),
+
+    compare: (() => {
+      try {
+        if (!payloadStr) return templates.initial;
+        const otherContext = JSON.parse(payloadStr);
+        const thisScore = context.result.score;
+        const otherScore = otherContext.result.score;
+        const winner = thisScore >= otherScore ? context.inputs.propertyName : otherContext.inputs.propertyName;
+        const weaker = thisScore >= otherScore ? otherContext.inputs.propertyName : context.inputs.propertyName;
+        const strongerMetrics = thisScore >= otherScore ? 'superior coverage ratios and stronger levered return profile' : 'tighter downside cushion and superior risk-adjusted basis';
+        
+        return `**${winner}** is the strongest relative investment case due to its ${strongerMetrics}. 
+
+**${weaker}** remains viable but exhibits tighter constraints against institutional yield and leverage thresholds under comparative stress. Attention should prioritize diligence on **${winner}**'s core return drivers rather than chasing yield on the weaker asset.`;
+      } catch (e) {
+        return `Comparative analysis temporarily unavailable.`;
+      }
+    })()
   };
 
   return templates[action] || templates.initial;
